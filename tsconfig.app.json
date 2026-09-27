@@ -19,7 +19,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["@types/dom-chromium-ai"]
+    "types": ["@types/dom-chromium-ai", "vite/client"]
   },
   "include": ["src"]
 }

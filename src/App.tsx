@@ -760,7 +760,7 @@ export default function App() {
     await new Promise((resolve) => window.setTimeout(resolve, 160))
 
     const now = new Date()
-    let completionId = 0
+    let completionId: number | undefined
 
     if (item.recurrence) {
       const next = nextOccurrence(item, now)
@@ -788,6 +788,10 @@ export default function App() {
           occurrenceAt: itemTime(item),
         })
       })
+    }
+
+    if (completionId === undefined) {
+      throw new Error('Failed to record completion')
     }
 
     setCompletingIds((current) => {
