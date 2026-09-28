@@ -130,20 +130,12 @@ function getDefaultWeekday(item: CueItem) {
 
 function CueMark() {
   return (
-    <svg className="cue-mark-svg" viewBox="0 0 48 48" aria-hidden="true">
-      <defs>
-        <linearGradient id="cue-stick" x1="38" y1="8" x2="14" y2="32" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#b9a9ff" />
-          <stop offset="0.42" stopColor="#ff8b86" />
-          <stop offset="0.72" stopColor="#f6d66f" />
-          <stop offset="1" stopColor="#79dfbf" />
-        </linearGradient>
-      </defs>
-      <path d="M38.8 6.8 42 10 18.5 33.5l-3.2-3.2L38.8 6.8Z" fill="url(#cue-stick)" />
-      <path d="m15.2 30.4 3.1 3.1-3.4 3.4-3.1-3.1 3.4-3.4Z" fill="#f2fbf6" />
-      <circle cx="9.7" cy="38" r="5.7" fill="#f2fbf6" />
-      <circle cx="9.7" cy="38" r="2.2" fill="#79dfbf" />
-    </svg>
+    <img
+      className="cue-mark-svg"
+      src="/cue-icon.svg"
+      alt=""
+      aria-hidden="true"
+    />
   )
 }
 
