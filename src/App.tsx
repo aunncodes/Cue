@@ -122,6 +122,10 @@ function combineLocalDateTime(dateValue: string, timeValue: string) {
   return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString()
 }
 
+function toDateTimeInput(value: string) {
+  return `${toDateInput(value)}T${toTimeInput(value)}`
+}
+
 function getDefaultWeekday(item: CueItem) {
   if (item.recurrence?.daysOfWeek.length) return item.recurrence.daysOfWeek[0]
   const value = itemTime(item)
@@ -413,11 +417,61 @@ function ItemRow({
 }) {
   const meta = itemMeta(item)
   const id = item.id!
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
+  const [customSnooze, setCustomSnooze] = useState('')
+  const snoozeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!snoozeOpen) return
+
+    const close = (event: PointerEvent) => {
+      if (!snoozeRef.current?.contains(event.target as Node)) setSnoozeOpen(false)
+    }
+
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [snoozeOpen])
 
   const complete = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     const rect = event.currentTarget.getBoundingClientRect()
     onComplete(item, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 })
+  }
+
+  const updateSnooze = (date: Date) => {
+    const value = date.toISOString()
+    onUpdate(item, item.kind === 'event'
+      ? { scheduledAt: value, dueAt: null }
+      : { dueAt: value })
+    setSnoozeOpen(false)
+  }
+
+  const snoozeBy = (days: number) => {
+    const current = itemTime(item)
+    const next = current ? new Date(current) : new Date()
+    next.setDate(next.getDate() + days)
+    if (!current && item.kind === 'task') next.setHours(17, 0, 0, 0)
+    updateSnooze(next)
+  }
+
+  const toggleSnooze = () => {
+    if (!snoozeOpen) {
+      const current = itemTime(item)
+      const next = current ? new Date(current) : new Date()
+      if (!current) {
+        next.setDate(next.getDate() + 1)
+        if (item.kind === 'task') next.setHours(17, 0, 0, 0)
+      }
+      setCustomSnooze(toDateTimeInput(next.toISOString()))
+    }
+    setSnoozeOpen((open) => !open)
+  }
+
+  const applyCustomSnooze = () => {
+    if (!customSnooze) return
+    const next = new Date(customSnooze)
+    if (Number.isNaN(next.getTime())) return
+    updateSnooze(next)
   }
 
   return (
@@ -464,18 +518,75 @@ function ItemRow({
         )}
       </div>
 
-      <button
-        type="button"
-        className={`row-menu ${expanded ? 'open' : ''}`}
-        onClick={(event) => {
-          event.stopPropagation()
-          onSelect(item)
-          onToggleExpanded(item)
-        }}
-        aria-label={expanded ? 'Close task details' : 'Open task details'}
-      >
-        <ChevronDown size={17} />
-      </button>
+      <div className="row-actions">
+        <div
+          ref={snoozeRef}
+          className="snooze-wrap"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation()
+              setSnoozeOpen(false)
+            }
+          }}
+        >
+          <button
+            type="button"
+            className={`row-action snooze-button ${snoozeOpen ? 'open' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onSelect(item)
+              toggleSnooze()
+            }}
+            aria-label={`Snooze ${item.title}`}
+            aria-expanded={snoozeOpen}
+            title="Snooze"
+          >
+            <Clock3 size={16} />
+          </button>
+
+          <AnimatePresence>
+            {snoozeOpen && (
+              <motion.div
+                className="snooze-popover"
+                initial={{ opacity: 0, y: -7, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -5, scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="snooze-presets">
+                  <button type="button" onClick={() => snoozeBy(1)}>1 day</button>
+                  <button type="button" onClick={() => snoozeBy(3)}>3 days</button>
+                  <button type="button" onClick={() => snoozeBy(7)}>1 week</button>
+                </div>
+                <div className="snooze-custom">
+                  <input
+                    type="datetime-local"
+                    value={customSnooze}
+                    onChange={(event) => setCustomSnooze(event.target.value)}
+                    aria-label="Custom snooze date and time"
+                  />
+                  <button type="button" onClick={applyCustomSnooze}>Set</button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <button
+          type="button"
+          className={`row-menu ${expanded ? 'open' : ''}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            setSnoozeOpen(false)
+            onSelect(item)
+            onToggleExpanded(item)
+          }}
+          aria-label={expanded ? 'Close task details' : 'Open task details'}
+        >
+          <ChevronDown size={17} />
+        </button>
+      </div>
 
       <AnimatePresence initial={false}>
         {expanded && <ItemEditor item={item} onUpdate={onUpdate} onDelete={onDelete} />}

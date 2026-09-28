@@ -275,7 +275,7 @@ a:focus-visible {
   position: relative;
   min-height: 64px;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 34px;
+  grid-template-columns: 28px minmax(0, 1fr) 72px;
   align-items: center;
   gap: 12px;
   padding: 9px 7px;
@@ -408,35 +408,133 @@ a:focus-visible {
 
 .task-meta .event-meta { color: #ffaaa5; }
 
+.row-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.task-row:hover .row-actions,
+.task-row:focus-visible .row-actions,
+.task-row-expanded .row-actions,
+.row-actions:focus-within { opacity: 1; }
+
+.row-action,
 .row-menu {
   width: 32px;
   height: 32px;
+  flex: 0 0 32px;
   display: grid;
   place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 10px;
   color: var(--faint);
   background: transparent;
-  opacity: 0;
   cursor: pointer;
   transition:
-    opacity 140ms ease,
-    color 140ms ease,
-    background 140ms ease,
-    transform 180ms cubic-bezier(.2, .9, .2, 1.2);
+    color 120ms ease,
+    background 120ms ease,
+    transform 155ms cubic-bezier(.2, .9, .2, 1.25),
+    box-shadow 140ms ease;
 }
 
-.task-row:hover .row-menu,
-.task-row:focus-visible .row-menu,
-.task-row-expanded .row-menu,
-.row-menu:focus-visible { opacity: 1; }
-
+.row-action:hover,
 .row-menu:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px) scale(1.04);
+}
+
+.snooze-button.open {
+  color: #1b302d;
+  background: var(--mint);
+  box-shadow: 0 5px 16px rgba(121, 223, 191, 0.2);
 }
 
 .row-menu.open { transform: rotate(180deg); }
+
+.snooze-wrap {
+  position: relative;
+  display: grid;
+}
+
+.snooze-popover {
+  position: absolute;
+  z-index: 40;
+  top: 38px;
+  right: 0;
+  width: min(242px, calc(100vw - 42px));
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: rgba(12, 28, 41, 0.97);
+  box-shadow: 0 18px 45px rgba(2, 12, 18, 0.34);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+}
+
+.snooze-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.snooze-presets button,
+.snooze-custom button {
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 11px;
+  font-weight: 680;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.snooze-presets button:hover,
+.snooze-custom button:hover {
+  background: color-mix(in srgb, var(--mint) 18%, rgba(255, 255, 255, 0.055));
+  transform: translateY(-1px);
+}
+
+.snooze-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.snooze-custom input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: 0;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  color-scheme: dark;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.snooze-custom input:focus {
+  border-color: rgba(121, 223, 191, 0.5);
+  box-shadow: 0 0 0 3px rgba(121, 223, 191, 0.07);
+}
+
+.snooze-custom button {
+  color: #17312c;
+  background: var(--mint);
+  font-weight: 780;
+}
 
 .task-editor {
   grid-column: 1 / -1;
@@ -658,10 +756,11 @@ a:focus-visible {
   .composer input { font-size: 16px; }
   .submit-button { width: 40px; height: 40px; flex-basis: 40px; border-radius: 13px; }
   .sections { margin-top: 42px; gap: 34px; }
-  .task-row { grid-template-columns: 28px minmax(0, 1fr) 32px; }
-  .row-menu { opacity: 1; }
+  .task-row { grid-template-columns: 28px minmax(0, 1fr) 72px; }
+  .row-actions { opacity: 1; }
   .task-row:hover,
   .task-row:focus-visible { transform: translateX(3px) scale(1.002); }
+  .snooze-popover { right: -3px; }
   .task-editor { padding-left: 0; }
   .editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .undo-toast { bottom: 14px; }
