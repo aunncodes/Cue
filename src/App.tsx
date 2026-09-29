@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react'
+import { AccountControl, useCueAuth } from './auth'
 import { db } from './db'
 import { parseLocally, refineWithServer } from './ai'
 import { describeRecurrence, nextOccurrence } from './recurrence'
@@ -654,6 +655,7 @@ function Section({
 }
 
 export default function App() {
+  const { getToken, isLoaded: authLoaded, isSignedIn } = useCueAuth()
   const items = useLiveQuery(() => db.items.orderBy('createdAt').reverse().toArray(), []) ?? []
   const [draft, setDraft] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -837,16 +839,21 @@ export default function App() {
       updatedAt: now,
     })
 
-    void refineWithServer(input).then(async (refined) => {
-      if (!refined) return
-      const current = await db.items.get(id)
-      if (!current || current.completedAt || current.updatedAt !== now) return
+    if (!authLoaded || !isSignedIn) return
 
-      await db.items.update(id, {
-        ...refined,
-        updatedAt: new Date().toISOString(),
+    void getToken()
+      .then((token) => refineWithServer(input, token))
+      .then(async (refined) => {
+        if (!refined) return
+        const current = await db.items.get(id)
+        if (!current || current.completedAt || current.updatedAt !== now) return
+
+        await db.items.update(id, {
+          ...refined,
+          updatedAt: new Date().toISOString(),
+        })
       })
-    })
+      .catch(() => undefined)
   }
 
   async function updateItem(item: CueItem, patch: Partial<CueItem>) {
@@ -971,6 +978,7 @@ export default function App() {
           <span className="brand-mark"><CueMark /></span>
           <span>Cue</span>
         </motion.a>
+        <AccountControl />
       </header>
 
       <main className="board">

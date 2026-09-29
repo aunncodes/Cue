@@ -180,15 +180,18 @@ function normalizeServerItem(value: unknown): ParsedCueItem | null {
 
 let serverAIAvailable = true
 
-export async function refineWithServer(input: string): Promise<ParsedCueItem | null> {
-  if (!serverAIAvailable) return null
+export async function refineWithServer(input: string, token: string | null): Promise<ParsedCueItem | null> {
+  if (!serverAIAvailable || !token) return null
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 6000)
 
   try {
     const response = await fetch('/api/parse', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
         input,
         now: new Date().toISOString(),
@@ -198,7 +201,7 @@ export async function refineWithServer(input: string): Promise<ParsedCueItem | n
     })
 
     if (!response.ok) {
-      if (response.status === 404 || response.status === 503) serverAIAvailable = false
+      if (response.status === 404) serverAIAvailable = false
       return null
     }
     return normalizeServerItem(await response.json())

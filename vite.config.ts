@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { authorizeAiRequest } from './server/security.js'
 import { parseCueItem } from './server/parse.js'
 
 function localApiPlugin(env: Record<string, string>): Plugin {
@@ -17,6 +18,22 @@ function localApiPlugin(env: Record<string, string>): Plugin {
         }
 
         try {
+          const access = await authorizeAiRequest({
+            authorization: req.headers.authorization,
+            clientIp: req.socket.remoteAddress,
+            env,
+          })
+
+          for (const [name, value] of Object.entries(access.headers || {})) {
+            res.setHeader(name, value)
+          }
+
+          if (!access.ok) {
+            res.statusCode = access.status
+            res.end(JSON.stringify(access.body))
+            return
+          }
+
           let rawBody = ''
           req.setEncoding('utf8')
           for await (const chunk of req) rawBody += chunk
