@@ -12,6 +12,7 @@ export type RecurrenceRule = {
 
 export type CueItem = {
   id?: number
+  syncId: string
   title: string
   kind: ItemKind
   dueAt: string | null
@@ -22,13 +23,23 @@ export type CueItem = {
   completedAt: string | null
   createdAt: string
   updatedAt: string
+  deletedAt: string | null
 }
 
 export type Completion = {
   id?: number
+  syncId: string
   itemId: number
+  itemSyncId: string
   completedAt: string
   occurrenceAt: string | null
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type CueMetadata = {
+  key: string
+  value: number
 }
 
 export type ParsedCueItem = Pick<
