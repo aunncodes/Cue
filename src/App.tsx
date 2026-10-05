@@ -21,6 +21,7 @@ import {
 import { AccountControl, useCueAuth } from './auth'
 import { db } from './db'
 import { parseLocally, refineWithServer } from './ai'
+import { syncCueData } from './sync'
 import { describeRecurrence, nextOccurrence } from './recurrence'
 import type { Completion, CueItem, RecurrenceMode, RecurrenceUnit } from './types'
 
@@ -667,8 +668,20 @@ export default function App() {
   const rowRefs = useRef(new Map<number, HTMLDivElement>())
   const undoTimer = useRef<number | null>(null)
   const burstId = useRef(0)
+  const syncTimer = useRef<number | null>(null)
 
-  const activeItems = useMemo(() => items.filter((item) => !item.completedAt), [items])
+  const queueSync = () => {
+    if (!authLoaded || !isSignedIn) return
+    if (syncTimer.current) window.clearTimeout(syncTimer.current)
+
+    syncTimer.current = window.setTimeout(() => {
+      void getToken()
+        .then((token) => syncCueData(token))
+        .catch(() => undefined)
+    }, 400)
+  }
+
+  const activeItems = useMemo(() => items.filter((item) => !item.deletedAt && !item.completedAt), [items])
 
   const grouped = useMemo(() => {
     const now = new Date()
@@ -747,8 +760,17 @@ export default function App() {
     navigator.storage?.persist?.().catch(() => undefined)
     return () => {
       if (undoTimer.current) window.clearTimeout(undoTimer.current)
+      if (syncTimer.current) window.clearTimeout(syncTimer.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!authLoaded || !isSignedIn) return
+
+    void getToken()
+      .then((token) => syncCueData(token))
+      .catch(() => undefined)
+  }, [authLoaded, isSignedIn, getToken])
 
   useEffect(() => {
     if (selectedId !== null && !orderedIds.includes(selectedId)) {
@@ -834,11 +856,14 @@ export default function App() {
     const now = new Date().toISOString()
     const id = await db.items.add({
       ...local,
+      syncId: crypto.randomUUID(),
       completedAt: null,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     })
 
+    queueSync()
     if (!authLoaded || !isSignedIn) return
 
     void getToken()
@@ -852,6 +877,7 @@ export default function App() {
           ...refined,
           updatedAt: new Date().toISOString(),
         })
+        queueSync()
       })
       .catch(() => undefined)
   }
@@ -859,6 +885,7 @@ export default function App() {
   async function updateItem(item: CueItem, patch: Partial<CueItem>) {
     if (!item.id) return
     await db.items.update(item.id, { ...patch, updatedAt: new Date().toISOString() })
+    queueSync()
   }
 
   async function completeItem(item: CueItem, origin: { x: number; y: number }) {
@@ -870,32 +897,41 @@ export default function App() {
     await new Promise((resolve) => window.setTimeout(resolve, 160))
 
     const now = new Date()
+    const timestamp = now.toISOString()
     let completionId: number | undefined
 
     if (item.recurrence) {
       const next = nextOccurrence(item, now)
       await db.transaction('rw', db.items, db.completions, async () => {
         completionId = await db.completions.add({
+          syncId: crypto.randomUUID(),
           itemId: id,
-          completedAt: now.toISOString(),
+          itemSyncId: item.syncId,
+          completedAt: timestamp,
           occurrenceAt: itemTime(item),
+          updatedAt: timestamp,
+          deletedAt: null,
         })
         await db.items.update(id, {
           scheduledAt: item.scheduledAt ? next : null,
           dueAt: item.dueAt ? next : null,
-          updatedAt: now.toISOString(),
+          updatedAt: timestamp,
         })
       })
     } else {
       await db.transaction('rw', db.items, db.completions, async () => {
         await db.items.update(id, {
-          completedAt: now.toISOString(),
-          updatedAt: now.toISOString(),
+          completedAt: timestamp,
+          updatedAt: timestamp,
         })
         completionId = await db.completions.add({
+          syncId: crypto.randomUUID(),
           itemId: id,
-          completedAt: now.toISOString(),
+          itemSyncId: item.syncId,
+          completedAt: timestamp,
           occurrenceAt: itemTime(item),
+          updatedAt: timestamp,
+          deletedAt: null,
         })
       })
     }
@@ -911,41 +947,60 @@ export default function App() {
     })
     setExpandedId((current) => current === id ? null : current)
     showUndo({ kind: 'complete', label: 'Done', item, completionId })
+    queueSync()
   }
 
   async function deleteItem(item: CueItem) {
     if (!item.id) return
     const id = item.id
     const completions = await db.completions.where('itemId').equals(id).toArray()
+    const now = new Date().toISOString()
 
     await db.transaction('rw', db.items, db.completions, async () => {
-      await db.items.delete(id)
-      await db.completions.where('itemId').equals(id).delete()
+      await db.items.update(id, { deletedAt: now, updatedAt: now })
+      await db.completions.where('itemId').equals(id).modify({
+        deletedAt: now,
+        updatedAt: now,
+      })
     })
 
     setExpandedId((current) => current === id ? null : current)
     showUndo({ kind: 'delete', label: 'Deleted', item, completions })
+    queueSync()
   }
 
   async function undoLastAction() {
     if (!undoAction) return
     if (undoTimer.current) window.clearTimeout(undoTimer.current)
 
+    const now = new Date().toISOString()
+
     if (undoAction.kind === 'complete') {
       await db.transaction('rw', db.items, db.completions, async () => {
-        await db.items.put({ ...undoAction.item, updatedAt: new Date().toISOString() })
-        await db.completions.delete(undoAction.completionId)
+        await db.items.put({ ...undoAction.item, updatedAt: now })
+        await db.completions.update(undoAction.completionId, {
+          deletedAt: now,
+          updatedAt: now,
+        })
       })
       focusItem(undoAction.item.id!)
     } else {
       await db.transaction('rw', db.items, db.completions, async () => {
-        await db.items.put(undoAction.item)
-        if (undoAction.completions.length) await db.completions.bulkPut(undoAction.completions)
+        await db.items.put({ ...undoAction.item, deletedAt: null, updatedAt: now })
+
+        for (const completion of undoAction.completions) {
+          await db.completions.put({
+            ...completion,
+            deletedAt: null,
+            updatedAt: now,
+          })
+        }
       })
       focusItem(undoAction.item.id!)
     }
 
     setUndoAction(null)
+    queueSync()
   }
 
   const sectionProps = {

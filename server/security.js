@@ -1,42 +1,10 @@
-import { verifyToken } from '@clerk/backend'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
-
-function splitCsv(value) {
-  if (typeof value !== 'string') return []
-  return value.split(',').map((item) => item.trim()).filter(Boolean)
-}
+import { authorizeRequest, splitCsv } from './auth.js'
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
-
-function bearerToken(value) {
-  const header = Array.isArray(value) ? value[0] : value
-  if (typeof header !== 'string') return null
-  const match = header.match(/^Bearer\s+(.+)$/i)
-  return match?.[1]?.trim() || null
-}
-
-function addVercelParty(parties, host) {
-  if (!host) return
-  const cleanHost = String(host).replace(/^https?:\/\//, '').replace(/\/$/, '')
-  if (cleanHost) parties.add(`https://${cleanHost}`)
-}
-
-function authorizedParties(env) {
-  const parties = new Set([
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    ...splitCsv(env.CUE_AUTHORIZED_PARTIES),
-  ])
-
-  addVercelParty(parties, env.VERCEL_URL)
-  addVercelParty(parties, env.VERCEL_PROJECT_PRODUCTION_URL)
-  addVercelParty(parties, env.VERCEL_BRANCH_URL)
-
-  return [...parties]
 }
 
 function resetSeconds(result) {
@@ -61,26 +29,10 @@ function error(status, message, headers = {}) {
 }
 
 export async function authorizeAiRequest({ authorization, clientIp, env = process.env }) {
-  const secretKey = env.CLERK_SECRET_KEY?.trim()
-  if (!secretKey) return error(503, 'Authentication is not configured')
+  const access = await authorizeRequest({ authorization, env })
+  if (!access.ok) return access
 
-  const token = bearerToken(authorization)
-  if (!token) return error(401, 'Sign in to use AI parsing')
-
-  let verified
-  try {
-    verified = await verifyToken(token, {
-      secretKey,
-      authorizedParties: authorizedParties(env),
-    })
-  } catch (authError) {
-    console.warn('Cue auth rejected a request:', authError instanceof Error ? authError.message : authError)
-    return error(401, 'Invalid session')
-  }
-
-  const userId = verified.sub
-  if (!userId) return error(401, 'Invalid session')
-
+  const userId = access.userId
   const admins = new Set(splitCsv(env.CUE_ADMIN_USER_IDS))
   if (admins.has(userId)) {
     return { ok: true, userId, isAdmin: true, headers: {} }
