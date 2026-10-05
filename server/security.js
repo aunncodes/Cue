@@ -2,6 +2,11 @@ import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { authorizeRequest, splitCsv } from './auth.js'
 
+function positiveInteger(value, fallback) {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
 function resetSeconds(result) {
   return result.reset > 1_000_000_000_000 ? Math.ceil(result.reset / 1000) : result.reset
 }
