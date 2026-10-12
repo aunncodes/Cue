@@ -2,10 +2,11 @@ import { db } from './db'
 import type { Completion, CueItem } from './types'
 
 const DATA_VERSION_KEY = 'dataVersion'
-export const CURRENT_DATA_VERSION = 2
+export const CURRENT_DATA_VERSION = 3
 
 type LegacyCueItem = CueItem & {
   syncId?: string
+  relatedNodeIds?: string[]
   deletedAt?: string | null
 }
 
@@ -50,8 +51,18 @@ async function migrateToVersion2() {
   }
 }
 
+async function migrateToVersion3() {
+  const items = await db.items.toArray() as LegacyCueItem[]
+
+  for (const item of items) {
+    if (item.id === undefined || item.relatedNodeIds) continue
+    await db.items.update(item.id, { relatedNodeIds: [] })
+  }
+}
+
 const migrations = new Map<number, () => Promise<void>>([
   [2, migrateToVersion2],
+  [3, migrateToVersion3],
 ])
 
 export async function migrateDatabase() {
@@ -72,10 +83,21 @@ export async function migrateDatabase() {
       throw new Error(`Missing Cue data migration for version ${nextVersion}.`)
     }
 
-    await db.transaction('rw', db.items, db.completions, db.metadata, async () => {
-      await migrate()
-      await db.metadata.put({ key: DATA_VERSION_KEY, value: nextVersion })
-    })
+    await db.transaction(
+      'rw',
+      db.items,
+      db.completions,
+      db.nodes,
+      db.edges,
+      db.facts,
+      db.sources,
+      db.suggestions,
+      db.metadata,
+      async () => {
+        await migrate()
+        await db.metadata.put({ key: DATA_VERSION_KEY, value: nextVersion })
+      },
+    )
 
     version = nextVersion
   }
